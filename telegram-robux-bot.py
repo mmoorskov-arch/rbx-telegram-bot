@@ -1,12 +1,14 @@
 # telegram-robux-bot.py
-# УПРОЩЕННАЯ ВЕРСИЯ БЕЗ SQLITE (чтобы не было ошибок на хостинге)
+# ЧИСТАЯ стабильная версия для bothost
+# aiogram 3.x | polling | без sqlite
 
 import os
 import asyncio
 import logging
 from datetime import datetime
 
-from aiogram import Bot, Dispatcher, F, types
+from aiogram import Bot, Dispatcher, F
+from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
@@ -29,16 +31,17 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# временное хранение заказов в памяти
 orders = {}
 
 
+# ================= FSM =================
 class OrderForm(StatesGroup):
     roblox_nick = State()
     robux_amount = State()
     waiting_screenshot = State()
 
 
+# ================= UTILS =================
 def generate_order_id():
     return "RBX" + datetime.now().strftime("%Y%m%d%H%M%S")
 
@@ -49,10 +52,7 @@ def calculate_price(amount: int) -> float:
 
 # ================= START =================
 @dp.message(Command("start"))
-async def start(message: types.Message):
-    if message.chat.type != "private":
-        return
-
+async def start(message: Message):
     builder = InlineKeyboardBuilder()
     builder.button(text="Да, больше 14 дней", callback_data="group_yes")
     builder.button(text="Проверку админом", callback_data="group_check")
@@ -64,15 +64,16 @@ async def start(message: types.Message):
     )
 
 
+# ================= ПРОВЕРКА ГРУППЫ =================
 @dp.callback_query(F.data == "group_yes")
-async def group_yes(callback: types.CallbackQuery, state: FSMContext):
+async def group_yes(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer("Введите ваш ник в Roblox:")
     await state.set_state(OrderForm.roblox_nick)
     await callback.answer()
 
 
 @dp.callback_query(F.data == "group_check")
-async def group_check(callback: types.CallbackQuery):
+async def group_check(callback: CallbackQuery):
     user = callback.from_user
     username = f"@{user.username}" if user.username else f"id {user.id}"
 
@@ -85,8 +86,9 @@ async def group_check(callback: types.CallbackQuery):
     await callback.answer()
 
 
+# ================= ОФОРМЛЕНИЕ =================
 @dp.message(OrderForm.roblox_nick)
-async def get_nick(message: types.Message, state: FSMContext):
+async def get_nick(message: Message, state: FSMContext):
     nick = message.text.strip()
     if not nick:
         await message.answer("Ник не может быть пустым.")
@@ -98,7 +100,7 @@ async def get_nick(message: types.Message, state: FSMContext):
 
 
 @dp.message(OrderForm.robux_amount)
-async def get_amount(message: types.Message, state: FSMContext):
+async def get_amount(message: Message, state: FSMContext):
     if not message.text.isdigit():
         await message.answer("Введите число.")
         return
@@ -136,10 +138,11 @@ async def get_amount(message: types.Message, state: FSMContext):
     await state.set_state(OrderForm.waiting_screenshot)
 
 
+# ================= СКРИН =================
 @dp.message(F.photo, OrderForm.waiting_screenshot)
-async def get_screenshot(message: types.Message, state: FSMContext):
+async def get_screenshot(message: Message, state: FSMContext):
     data = await state.get_data()
-    order_id = data["order_id"]
+    order_id = data.get("order_id")
 
     order = orders.get(order_id)
     if not order:
@@ -151,12 +154,14 @@ async def get_screenshot(message: types.Message, state: FSMContext):
     builder.button(text="Отклонить", callback_data=f"reject_{order_id}")
     builder.adjust(1)
 
+    username = order["username"] or "без username"
+
     await bot.send_photo(
         ADMIN_ID,
         photo=message.photo[-1].file_id,
         caption=(
             f"Новый заказ {order_id}\n"
-            f"Пользователь: @{order['username']}\n"
+            f"Пользователь: @{username}\n"
             f"Ник Roblox: {order['nick']}\n"
             f"Робуксы: {order['amount']}\n"
             f"Сумма: {order['price']:.2f} руб."
@@ -168,9 +173,10 @@ async def get_screenshot(message: types.Message, state: FSMContext):
     await state.clear()
 
 
+# ================= АДМИН =================
 @dp.callback_query(F.data.startswith("confirm_"))
-async def confirm(callback: types.CallbackQuery):
-    order_id = callback.data.split("_")[1]
+async def confirm(callback: CallbackQuery):
+    order_id = callback.data.split("_", 1)[1]
     order = orders.get(order_id)
 
     if order:
@@ -185,8 +191,8 @@ async def confirm(callback: types.CallbackQuery):
 
 
 @dp.callback_query(F.data.startswith("reject_"))
-async def reject(callback: types.CallbackQuery):
-    order_id = callback.data.split("_")[1]
+async def reject(callback: CallbackQuery):
+    order_id = callback.data.split("_", 1)[1]
     order = orders.get(order_id)
 
     if order:
@@ -196,6 +202,7 @@ async def reject(callback: types.CallbackQuery):
     await callback.answer("Отклонено")
 
 
+# ================= ЗАПУСК =================
 async def main():
     await dp.start_polling(bot)
 
