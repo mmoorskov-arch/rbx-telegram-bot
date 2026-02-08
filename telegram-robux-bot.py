@@ -16,7 +16,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 # ================= НАСТРОЙКИ =================
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("API_TOKEN")
 ADMIN_ID = 7227557185
 PRICE_RATE = 2  # 1 рубль = 2 робукса
 FEEDBACK_LINK = "https://t.me/rbxklev/2"
