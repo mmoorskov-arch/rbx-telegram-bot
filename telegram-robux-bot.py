@@ -50,7 +50,7 @@ def calculate_price(amount: int) -> float:
 # ================= START =================
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    if message.chat.type != types.ChatType.PRIVATE:
+    if message.chat.type != "private":
         return
 
     builder = InlineKeyboardBuilder()
